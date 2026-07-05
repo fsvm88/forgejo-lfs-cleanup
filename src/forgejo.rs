@@ -24,15 +24,15 @@ pub fn detect_forgejo(client: &reqwest::blocking::Client, web_base: &Url) -> Res
     let status = response.status();
     if !status.is_success() {
         bail!(
-            "{url} returned {status} — this instance does not look like Forgejo \
-             (this tool only supports Forgejo, not plain Gitea; see \
-             ai-docs/research-forgejo-lfs-api.md §1/§7)"
+            "{url} returned {status} — this instance does not look like Forgejo. This tool \
+             only supports Forgejo, not plain Gitea or other forges, because it depends on a \
+             Forgejo-specific web route to delete LFS objects (there's no such route in Gitea)."
         );
     }
 
-    let body: ForgejoVersionResponse = response
-        .json()
-        .context("/api/forgejo/v1/version returned a 2xx but the body wasn't the expected JSON shape")?;
+    let body: ForgejoVersionResponse = response.json().context(
+        "/api/forgejo/v1/version returned a 2xx but the body wasn't the expected JSON shape",
+    )?;
 
     Ok(body.version)
 }
@@ -55,13 +55,13 @@ pub fn parse_ssh_url(ssh_url: &str, web_url_override: Option<&str>) -> Result<Re
     let (host, path) = split_ssh_url(ssh_url)
         .with_context(|| format!("could not parse '{ssh_url}' as an SSH git URL"))?;
 
-    let (owner, repo) = split_owner_repo(&path)
-        .with_context(|| format!("could not extract owner/repo from path '{path}' in '{ssh_url}'"))?;
+    let (owner, repo) = split_owner_repo(&path).with_context(|| {
+        format!("could not extract owner/repo from path '{path}' in '{ssh_url}'")
+    })?;
 
     let web_base = match web_url_override {
-        Some(explicit) => {
-            Url::parse(explicit).with_context(|| format!("'{explicit}' is not a valid --web-url"))?
-        }
+        Some(explicit) => Url::parse(explicit)
+            .with_context(|| format!("'{explicit}' is not a valid --web-url"))?,
         None => Url::parse(&format!("https://{host}"))
             .with_context(|| format!("derived host '{host}' is not a valid URL host"))?,
     };
@@ -79,7 +79,10 @@ pub fn parse_ssh_url(ssh_url: &str, web_url_override: Option<&str>) -> Result<Re
 fn split_ssh_url(ssh_url: &str) -> Result<(String, String)> {
     if ssh_url.starts_with("ssh://") {
         let url = Url::parse(ssh_url).context("invalid ssh:// URL")?;
-        let host = url.host_str().context("ssh:// URL has no host")?.to_string();
+        let host = url
+            .host_str()
+            .context("ssh:// URL has no host")?
+            .to_string();
         let path = url.path().trim_start_matches('/').to_string();
         return Ok((host, path));
     }
@@ -115,7 +118,8 @@ mod tests {
 
     #[test]
     fn parses_ssh_scheme_url() {
-        let target = parse_ssh_url("ssh://git@codeberg.org/example-org/example-repo.git", None).unwrap();
+        let target =
+            parse_ssh_url("ssh://git@codeberg.org/example-org/example-repo.git", None).unwrap();
         assert_eq!(target.web_base.as_str(), "https://codeberg.org/");
         assert_eq!(target.owner, "example-org");
         assert_eq!(target.repo, "example-repo");
@@ -136,7 +140,10 @@ mod tests {
             Some("https://forgejo.example.com:3000"),
         )
         .unwrap();
-        assert_eq!(target.web_base.as_str(), "https://forgejo.example.com:3000/");
+        assert_eq!(
+            target.web_base.as_str(),
+            "https://forgejo.example.com:3000/"
+        );
         assert_eq!(target.owner, "owner");
         assert_eq!(target.repo, "repo");
     }

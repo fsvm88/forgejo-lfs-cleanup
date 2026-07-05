@@ -132,8 +132,7 @@ fn parse_listing_page(html: &str) -> Result<(Vec<LfsObject>, u32)> {
     let document = Html::parse_document(html);
     let row_sel = Selector::parse("table#lfs-files-table tbody tr").expect("valid selector");
     let oid_link_sel = Selector::parse("a.tw-font-mono").expect("valid selector");
-    let find_link_sel =
-        Selector::parse("a[href*='/settings/lfs/find']").expect("valid selector");
+    let find_link_sel = Selector::parse("a[href*='/settings/lfs/find']").expect("valid selector");
     let page_link_sel = Selector::parse("a[href*='page=']").expect("valid selector");
 
     let mut objects = Vec::new();
@@ -212,7 +211,8 @@ mod tests {
 
     #[test]
     fn defaults_to_one_page_with_no_pagination_widget() {
-        let (_, total_pages) = parse_listing_page("<table id=\"lfs-files-table\"><tbody></tbody></table>").unwrap();
+        let (_, total_pages) =
+            parse_listing_page("<table id=\"lfs-files-table\"><tbody></tbody></table>").unwrap();
         assert_eq!(total_pages, 1);
     }
 

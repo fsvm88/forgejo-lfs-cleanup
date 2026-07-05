@@ -15,7 +15,9 @@ fn require_binary(name: &str, version_args: &[&str]) -> Result<()> {
     let output = Command::new(name)
         .args(version_args)
         .output()
-        .with_context(|| format!("`{name}` was not found on PATH — install it before running this tool"))?;
+        .with_context(|| {
+            format!("`{name}` was not found on PATH — install it before running this tool")
+        })?;
 
     if !output.status.success() {
         bail!(

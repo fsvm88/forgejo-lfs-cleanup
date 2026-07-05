@@ -40,8 +40,15 @@ pub fn jar_from_cookie_file(path: &Path) -> Result<Arc<Jar>> {
         if fields.len() != 7 {
             continue; // not a cookie line (e.g. stray blank/malformed line)
         }
-        let [domain, _include_subdomains, cookie_path, _secure, _expiry, name, value] =
-            fields.as_slice()
+        let [
+            domain,
+            _include_subdomains,
+            cookie_path,
+            _secure,
+            _expiry,
+            name,
+            value,
+        ] = fields.as_slice()
         else {
             unreachable!("checked len == 7 above")
         };
@@ -141,7 +148,9 @@ mod tests {
 
         let jar = jar_from_cookie_file(&path).unwrap();
         let url = Url::parse("https://codeberg.org/example-org/example-repo/settings/lfs").unwrap();
-        let header = jar.cookies(&url).expect("cookies should be set for this URL");
+        let header = jar
+            .cookies(&url)
+            .expect("cookies should be set for this URL");
         let header_str = header.to_str().unwrap();
         assert!(header_str.contains("lang=en-US"));
         assert!(header_str.contains("cb_sessionid=abc123"));

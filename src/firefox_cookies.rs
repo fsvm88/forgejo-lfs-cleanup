@@ -77,7 +77,10 @@ pub fn jar_from_firefox_profile(domain: &str) -> Result<(Arc<Jar>, PathBuf)> {
     for row in &rows {
         let url = Url::parse(&format!("https://{domain}{}", row.path))
             .with_context(|| format!("couldn't build a URL for cookie path '{}'", row.path))?;
-        jar.add_cookie_str(&format!("{}={}; Path={}", row.name, row.value, row.path), &url);
+        jar.add_cookie_str(
+            &format!("{}={}; Path={}", row.name, row.value, row.path),
+            &url,
+        );
     }
 
     Ok((Arc::new(jar), profile_dir))
@@ -129,8 +132,12 @@ fn read_cookies_for_domain(cookies_db: &Path, domain: &str) -> Result<Vec<Cookie
         }
     }
 
-    let conn = Connection::open(&dest)
-        .with_context(|| format!("failed to open copied cookie DB from {}", cookies_db.display()))?;
+    let conn = Connection::open(&dest).with_context(|| {
+        format!(
+            "failed to open copied cookie DB from {}",
+            cookies_db.display()
+        )
+    })?;
     conn.execute_batch("PRAGMA wal_checkpoint(FULL);").ok(); // best-effort if no WAL present
 
     let mut stmt = conn.prepare(

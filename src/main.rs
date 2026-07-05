@@ -37,9 +37,10 @@ fn main() -> anyhow::Result<()> {
         (session::jar_from_cookie_file(path)?, None)
     } else {
         match (&args.username, &args.password) {
-            (Some(username), Some(password)) => {
-                (Arc::new(Jar::default()), Some((username.clone(), password.clone())))
-            }
+            (Some(username), Some(password)) => (
+                Arc::new(Jar::default()),
+                Some((username.clone(), password.clone())),
+            ),
             (None, None) => {
                 let (jar, profile) = firefox_cookies::jar_from_firefox_profile(&host)?;
                 println!("using cookies from Firefox profile {}", profile.display());
@@ -83,7 +84,7 @@ fn main() -> anyhow::Result<()> {
         .values()
         .filter(|obj| !referenced.contains(&obj.oid))
         .collect();
-    stale.sort_by(|a, b| b.size.cmp(&a.size));
+    stale.sort_by_key(|obj| std::cmp::Reverse(obj.size));
     let stale_bytes: u64 = stale.iter().map(|o| o.size).sum();
 
     println!(
@@ -150,7 +151,11 @@ fn delete_stale(client: &Client, target: &RepoTarget, stale: &[&LfsObject]) -> a
     );
 
     if !failures.is_empty() {
-        bail!("{} object(s) failed to delete: {}", failures.len(), failures.join(", "));
+        bail!(
+            "{} object(s) failed to delete: {}",
+            failures.len(),
+            failures.join(", ")
+        );
     }
 
     Ok(())
