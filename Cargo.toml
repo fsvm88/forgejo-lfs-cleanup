@@ -2,6 +2,12 @@
 name = "forgejo-lfs-cleanup"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+description = "Deletes Git LFS objects unreachable from any ref in a Forgejo repository"
+license = "MIT"
+readme = "README.md"
+keywords = ["forgejo", "git-lfs", "git", "cleanup"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.103"
@@ -12,5 +18,4 @@ scraper = "0.27.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 tempfile = "3.27.0"
-thiserror = "2.0.18"
 url = "2.5.8"

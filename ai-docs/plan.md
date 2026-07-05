@@ -1,6 +1,6 @@
 ---
 title: Implementation plan
-status: all phases (0-6) implemented and verified live end-to-end
+status: all phases (0-8) implemented and verified live end-to-end; ready to publish
 last_updated: 2026-07-05
 tags: [plan, roadmap]
 ---
@@ -247,6 +247,50 @@ Firefox session and use it, failing loudly if none is found.
   (`example.com`) correctly failed with a clear message and exit code 1.
 - 3 new unit tests (exact/subdomain host matching, empty-result handling,
   clear failure when no profiles exist) — 13 total, all passing.
+
+## Phase 8 — Publish readiness — DONE 2026-07-05
+
+Requested: prepare the project to be published as a public git repo (not
+crates.io). Ran a security-first audit before any other work.
+
+- **Secret audit**: swept the entire working tree and full `git log -p`
+  history for the `forgejo-mcp` API token and every real session-cookie
+  value used during live validation. Clean — nothing was ever committed
+  (the working cookie file lived only in the scratchpad, outside the
+  repo).
+- **Genericized personal data**: the real Codeberg account (`example-org`
+  was `example-org`) and repo (`example-repo` was `example-repo`) used for
+  live validation appeared in doc-comments, prose docs, and — more
+  importantly — **test assertions** in `src/forgejo.rs` and
+  `src/session.rs`. Replaced everywhere with `example-org`/`example-repo`
+  placeholders. Tests re-verified passing after the rename.
+- **Fixed a real "works on my machine" bug**: `src/forgejo.rs`'s
+  non-Forgejo detection error told the user to see
+  `ai-docs/research-forgejo-lfs-api.md §1/§7` — a path that only exists
+  inside this repo checkout. Anyone running an installed binary (e.g. via
+  `cargo install --git`) would hit a dangling reference. Every other
+  `ai-docs`/`CLAUDE.md` mention in the codebase was in a `///` doc
+  comment (developer-facing, fine); this was the one in an actual
+  `bail!()` user-facing string. Rewrote it to be self-contained.
+- **`cargo clippy --all-targets -- -D warnings`**: had never been run.
+  Found one real finding (`sort_by` where `sort_by_key(Reverse(...))` is
+  idiomatic) — fixed. Clean after.
+- **`cargo fmt`**: had never been run either; `cargo build` being
+  warning-free is not the same bar. Applied once, all files reformatted,
+  re-verified build/test/clippy all still pass after.
+- **`Cargo.toml` metadata**: added `description`, `license = "MIT"`,
+  `readme`, `keywords`, `categories`, `rust-version = "1.85"` (the
+  edition-2024 minimum). Removed `thiserror`, which had been added in
+  Phase 1 speculatively and never actually used — `anyhow` covers all
+  error handling in this codebase.
+- **`LICENSE`**: added, MIT, per user's choice.
+- **CI**: added `.forgejo/workflows/ci.yml` (fmt check, clippy, build,
+  test) — Forgejo Actions, matching the project's own subject matter and
+  the fact that validation happened against Codeberg (a Forgejo Actions
+  host).
+- Did **not** add `repository`/`homepage` to `Cargo.toml` — no hosting
+  URL exists yet since the repo isn't published. Fill in once it has a
+  home.
 
 ## Explicitly out of scope
 
