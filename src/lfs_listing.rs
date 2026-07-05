@@ -72,6 +72,50 @@ fn listing_url(web_base: &Url, owner: &str, repo: &str, page: u32) -> Result<Url
         .context("failed to build the LFS listing URL")
 }
 
+/// Deletes one LFS object via `POST /{owner}/{repo}/settings/lfs/delete/{oid}`
+/// — there is no REST API for this (see ai-docs/research-forgejo-lfs-api.md
+/// §4); this is the same internal web route the repo settings UI uses, and
+/// it requires no CSRF token (confirmed live 2026-07-05). An empty-body
+/// POST that ends up back on the listing page is success; a redirect to
+/// `/user/login` means the session died mid-run; anything else is a hard
+/// error rather than a silently-assumed success.
+pub fn delete_object(client: &Client, target: &RepoTarget, oid: &str) -> Result<()> {
+    let delete_url = target
+        .web_base
+        .join(&format!(
+            "/{}/{}/settings/lfs/delete/{oid}",
+            target.owner, target.repo
+        ))
+        .context("failed to build the LFS delete URL")?;
+
+    let response = client
+        .post(delete_url.clone())
+        .send()
+        .with_context(|| format!("delete request to {delete_url} failed"))?;
+
+    let final_url = response.url().clone();
+    let status = response.status();
+
+    if final_url.path().contains("/user/login") {
+        anyhow::bail!(
+            "delete of {oid} redirected to the login page — the session expired or was rejected \
+             mid-run"
+        );
+    }
+
+    let expected_path = format!("/{}/{}/settings/lfs", target.owner, target.repo);
+    if !status.is_success() || final_url.path() != expected_path {
+        let body = response.text().unwrap_or_default();
+        anyhow::bail!(
+            "delete of {oid} did not land back on the LFS listing page as expected \
+             (ended at {final_url} with status {status}). Body starts with: {:.200}",
+            body
+        );
+    }
+
+    Ok(())
+}
+
 /// Parses one `settings/lfs` HTML page into its LFS object rows and the
 /// total page count (the highest `page=N` value linked anywhere in the
 /// pagination widget; defaults to 1 if no pagination links are present,

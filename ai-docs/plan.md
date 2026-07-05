@@ -1,6 +1,6 @@
 ---
 title: Implementation plan
-status: proposed
+status: core loop (Phases 0-5) implemented and verified live end-to-end; Phase 6 polish remaining
 last_updated: 2026-07-05
 tags: [plan, roadmap]
 ---
@@ -159,18 +159,35 @@ captured page (item 3), and resolve item 4 before finalizing Phase 3.
   317 referenced, 416 stale (17.7 MB) — internally consistent
   (733 − 416 = 317).
 
-## Phase 5 — Diff, report, guarded delete
+## Phase 5 — Diff, report, guarded delete — DONE 2026-07-05
 
-- Compute `existing - referenced`.
-- Always print a report (count, total bytes, table of OIDs).
-- Only delete when `--execute` (or similarly named) flag is passed;
-  otherwise exit after reporting (dry-run is default).
-- On execute: re-confirm interactively unless `--yes` is also passed
-  (for CI/scripted use).
-- Delete each stale OID via the web route; treat any non-success response
-  as a hard error for that object (log and continue vs. abort — default to
-  logging and continuing, summarizing failures at the end, so one bad
-  object doesn't block cleanup of the rest).
+- `lfs_listing::delete_object()`: `POST /{owner}/{repo}/settings/lfs/delete/{oid}`,
+  no CSRF needed (confirmed in Phase 0). Success is landing back on the
+  listing page; a redirect to `/user/login` is treated as a hard error
+  (session died mid-run) rather than a silent no-op.
+- `main.rs`: prints the full stale-object table (OID + exact byte size,
+  sorted largest-first) unconditionally, then:
+  - no `--execute` → prints "dry run: pass --execute..." and exits
+    without touching anything;
+  - `--execute` without `--yes` → interactive `Type 'yes' to confirm:`
+    prompt, aborts cleanly on anything else;
+  - `--execute --yes` → deletes every stale object, continuing past
+    individual failures (collected and reported in a summary, non-zero
+    exit if any failed) rather than aborting the whole run on the first
+    error.
+- **Verified live, all paths, against the real `example-org/example-repo`
+  repo:**
+  - Dry run: correctly reported 416 stale objects (17.7MB) and stopped.
+  - `--execute` with the confirmation prompt answered "no": correctly
+    aborted, nothing deleted.
+  - `--execute --yes`, with the user's explicit go-ahead given the scale
+    of the action (416 real objects, ~2.5 minutes): **all 416 deleted, 0
+    failures.** Re-running the tool afterward confirmed 0 stale objects
+    remain (317 objects exist, all referenced) — the repo is genuinely
+    clean.
+
+This completes the tool's core loop end-to-end on real production data,
+not just synthetic tests.
 
 ## Phase 6 — Polish
 
