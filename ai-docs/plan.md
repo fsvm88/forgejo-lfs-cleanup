@@ -1,6 +1,6 @@
 ---
 title: Implementation plan
-status: core loop (Phases 0-5) implemented and verified live end-to-end; Phase 6 polish remaining
+status: all phases (0-6) implemented and verified live end-to-end
 last_updated: 2026-07-05
 tags: [plan, roadmap]
 ---
@@ -189,14 +189,28 @@ captured page (item 3), and resolve item 4 before finalizing Phase 3.
 This completes the tool's core loop end-to-end on real production data,
 not just synthetic tests.
 
-## Phase 6 — Polish
+## Phase 6 — Polish — DONE 2026-07-05
 
-- `--dry-run` explicit flag as an alias/no-op-confirmation of the default,
-  for scripts that want to be explicit.
-- Exit codes: 0 clean, non-zero if any deletion failed or instance wasn't
-  Forgejo.
-- README with usage, and required token privileges (repo-admin on target
-  repo — see research doc §4).
+- `--dry-run` flag added, `conflicts_with = "execute"` (clap-enforced, exit
+  code 2 if both are passed). It's a no-op on behavior — dry run was
+  already the default — purely so scripts can state intent explicitly and
+  get a hard error instead of silent ambiguity if both flags are ever
+  passed together. Verified live.
+- Exit codes were already correct from how errors propagate through
+  `anyhow::Result` — verified live rather than changed: `0` on success
+  (including a clean "nothing to delete" dry run), `1` on non-Forgejo
+  instance / auth failure / any object failing to delete, `2` on clap
+  argument-conflict errors.
+- `README.md` added at the project root: requirements (git/git-lfs,
+  repo-admin permission, login credentials not an API token and why),
+  usage examples for both auth paths, the cookie-file escape hatch and
+  when it's needed, an options table, exit codes, and known limitations
+  linked back to `architecture.md`.
+
+This closes out the original plan. The tool is feature-complete per the
+initial ask: given an SSH URL, detect Forgejo, clone, compute referenced
+objects, enumerate existing objects, diff, report, and (opt-in) delete —
+all verified live against a real repo, including a full real cleanup run.
 
 ## Explicitly out of scope
 

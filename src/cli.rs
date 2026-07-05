@@ -39,6 +39,12 @@ pub struct Args {
     #[arg(long)]
     pub execute: bool,
 
+    /// Explicitly request a dry run. This is already the default behavior without
+    /// --execute; the flag exists so scripts can state their intent up front and
+    /// get a clear error instead of silent behavior if both are passed by mistake.
+    #[arg(long, conflicts_with = "execute")]
+    pub dry_run: bool,
+
     /// Skip the interactive confirmation prompt when --execute is passed.
     #[arg(long)]
     pub yes: bool,
