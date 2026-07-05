@@ -1,7 +1,7 @@
 ---
 title: Architecture decisions
-status: draft
-last_updated: 2026-07-04
+status: implemented and verified live
+last_updated: 2026-07-05
 tags: [architecture, decisions, rust]
 ---
 
@@ -98,36 +98,55 @@ live requirements for a request to be treated as authenticated:
 form has no hidden `_csrf` field, and an empty-body POST with just the
 right cookies succeeded (`303` to the settings page, not to login).
 
-**Practical implication for the tool:** don't try to reconstruct this
-cookie set by reading the browser's cookie database directly (a `SELECT`
-scoped to the site's host missed the `x-robot-challenge` and
-`cb_sessionid` cookies entirely in testing — possibly a host-matching
-quirk, possibly they're issued by JS after a challenge and never
-persisted to the same store). Instead, the tool should:
+**Practical implication for the tool — three auth sources, in this
+precedence order:**
 
-1. Perform its own real login flow: `GET /user/login` (to pick up
-   whatever the anti-bot layer requires, if it's satisfiable headlessly)
-   → `POST /user/login` with credentials → capture **every** `Set-Cookie`
-   from the whole exchange into a cookie jar, not just the ones we can
-   name in advance.
-2. Treat the anti-bot layer as a real, first-class unknown per target
-   instance — it may not exist on self-hosted Forgejo at all (Codeberg
-   specifically is a large public target and likely to have more
-   anti-scraping infra than a private self-hosted instance), or it may
-   require solving a JS challenge that a plain HTTP client can't do,
-   in which case the tool needs a documented manual fallback (e.g.
-   "export your browser's cookies for this site and pass them via
-   `--cookie-file`") rather than silently failing.
-3. Support `--cookie-file` (Netscape cookie-jar format, same as
-   `curl -b`) as an escape hatch for instances where scripted login can't
-   clear the anti-bot layer, alongside the scripted username+password
-   login as the primary path.
-4. If the account has 2FA, the scripted login must handle the second
+1. **`--cookie-file`** (explicit, highest precedence) — Netscape
+   cookie-jar format, same as `curl -b`. The manual escape hatch for
+   instances/accounts a scripted login or auto-detection can't handle.
+2. **`--username`/`--password`** (explicit) — scripted `POST /user/login`.
+   Unverified live (see below); expected to fail on anti-bot-protected
+   instances.
+3. **Automatic Firefox profile detection** (default when neither of the
+   above is given) — `src/firefox_cookies.rs` locates every Firefox
+   profile on the machine (across standard Linux/Snap/Flatpak/macOS/
+   Windows locations), copies+checkpoints each `cookies.sqlite` (handling
+   Firefox holding it open, exactly as validated by hand — see research
+   doc §5b), queries for rows matching the target host or its subdomains,
+   and uses whichever profile's matching cookies have the most recent
+   `lastAccessed` (a proxy for "the profile actually being used"). If no
+   profile has any cookies for the domain, this **fails loudly** naming
+   every location checked, rather than silently proceeding unauthenticated
+   — per the user's explicit request.
+
+**Update on the "don't read the cookie DB directly" concern (superseded,
+2026-07-05):** the original investigation found a `SELECT` scoped to the
+site's host missing `x-robot-challenge`/`cb_sessionid` entirely. Revisited
+this once auto-detection was implemented: those cookies **do** show up in
+a direct query now. The earlier miss wasn't a fundamental unreliability of
+reading the DB — it was that those particular cookies simply hadn't been
+issued/flushed to disk yet at that point in the browser session (the
+anti-bot challenge hadn't been completed in that browser tab yet). Once a
+real browser session has actually cleared the anti-bot layer and Firefox
+has flushed its cookie store, a direct `cookies.sqlite` read finds
+everything needed. Verified live end-to-end with zero manual cookie
+extraction: running the tool with no auth flags at all against
+`example-org/example-repo` auto-detected the right profile and
+authenticated correctly.
+
+Remaining open items for the auth layer:
+
+1. If the account has 2FA, the scripted login must handle the second
    factor (TOTP prompt at minimum) — not yet tested against a 2FA-enabled
    account; surface a clear error rather than failing silently if the
    login response indicates a 2FA challenge the tool doesn't handle yet.
-5. Reuse the same cookie jar for both enumeration (GET, paginated) and
-   deletion (POST) within one run.
+2. Reuse the same cookie jar for both enumeration (GET, paginated) and
+   deletion (POST) within one run — done, all three auth sources build
+   the jar before the client is constructed.
+3. Firefox auto-detection currently only covers Firefox, not
+   Chrome/Chromium (Chrome's cookies are encrypted at rest via the OS
+   keyring, which is meaningfully more work to decrypt — see the
+   conversation that led here; out of scope until asked for).
 
 This whole flow — list, locate an OID, delete it, verify it's gone — was
 exercised live end-to-end on production Codeberg (`example-org/example-repo`,
@@ -186,3 +205,9 @@ alone suffices for scripted/CI use).
   to "confirmed cookie/header requirements + acquisition strategy."
   Discovered and documented the anti-bot cookie requirement and the
   `--cookie-file` escape hatch it motivates.
+- 2026-07-05: Added automatic Firefox cookie-jar detection
+  (`src/firefox_cookies.rs`) as the default auth source when neither
+  `--cookie-file` nor `--username`/`--password` is given, per explicit
+  user request. Verified live with zero manual cookie handling. This also
+  superseded the earlier belief that reading the cookie DB directly was
+  unreliable — see "Auth strategy" above.

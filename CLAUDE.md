@@ -64,9 +64,13 @@ plain Gitea (Forgejo is detected and required — see
    (`example-org/example-repo`) — listed, located, deleted, and confirmed
    gone. No CSRF token needed. Required cookies turned out to be more than
    just the Forgejo session cookie: also a Codeberg-specific
-   `cb_sessionid` and an anti-bot `x-robot-challenge=passed` cookie,
-   neither discoverable by reading Firefox's cookie DB directly — see
-   `ai-docs/research-forgejo-lfs-api.md` §5b for exactly what worked.
+   `cb_sessionid` and an anti-bot `x-robot-challenge=passed` cookie. These
+   weren't found in an early direct Firefox-cookie-DB read, but that was a
+   session-timing issue (those cookies weren't issued/flushed yet at that
+   point), not a DB-reading limitation — a later direct DB read found them
+   fine once the browser had actually cleared the anti-bot layer. See
+   `ai-docs/research-forgejo-lfs-api.md` §5b and `architecture.md` "Auth
+   strategy" for the full account.
 3. ~~The exact HTML shape of the `settings/lfs` listing page~~ **RESOLVED
    2026-07-05:** `src/lfs_listing.rs` scrapes `table#lfs-files-table`,
    reading OID from the `.tw-font-mono` link's `title` attribute and
@@ -76,18 +80,22 @@ plain Gitea (Forgejo is detected and required — see
 4. ~~Whether `git lfs ls-files --all --long` works on a bare mirror~~
    **RESOLVED 2026-07-05: yes, no worktree needed** (see Phase 3 in
    plan.md).
-5. **How the tool acquires the cookie jar — implemented two ways:**
-   `--cookie-file` (Netscape format, **verified live end-to-end** against
-   codeberg.org) and scripted `--username`/`--password` login (**NOT
-   verified live** — no throwaway credentials available, and expected to
-   fail outright on anti-bot-protected instances like Codeberg since an
-   unauthenticated `GET /user/login` there sets no anti-bot cookie at all,
-   implying it requires a JS challenge a plain HTTP client can't run).
-   Scripted login remains for plain self-hosted Forgejo without that
-   layer — don't remove it, but don't trust it either without a real test.
+5. **How the tool acquires the cookie jar — implemented three ways, in
+   precedence order:** `--cookie-file` (Netscape format, **verified live**),
+   `--username`/`--password` scripted login (**NOT verified live** — no
+   throwaway credentials available, and expected to fail outright on
+   anti-bot-protected instances like Codeberg), and — added per explicit
+   user request, see `ai-docs/plan.md` Phase 7 — **automatic Firefox
+   profile detection** (`src/firefox_cookies.rs`) as the default when
+   neither of the above is given. **Verified live**: running with zero
+   auth flags against `example-org/example-repo` correctly found the real
+   Firefox profile and authenticated; pointing at a domain with no
+   matching cookies correctly failed loudly (named every location
+   checked, exit code 1) rather than proceeding unauthenticated.
 
 All of Phase 0's open items are now resolved or implemented as of
 2026-07-05. The one live-unverified path is scripted login (item 5) —
 treat `session::login()` as provisional until tested against a real
-account, and prefer `--cookie-file` when validating anything that
-depends on being logged in.
+account. Firefox auto-detection and `--cookie-file` are the two
+live-verified paths; prefer either when validating anything that depends
+on being logged in.

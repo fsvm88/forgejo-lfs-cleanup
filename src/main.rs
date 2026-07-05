@@ -1,5 +1,6 @@
 mod checks;
 mod cli;
+mod firefox_cookies;
 mod forgejo;
 mod gitrepo;
 mod lfs_listing;
@@ -26,9 +27,26 @@ fn main() -> anyhow::Result<()> {
         target.owner, target.repo, target.web_base
     );
 
-    let jar = match &args.cookie_file {
-        Some(path) => session::jar_from_cookie_file(path)?,
-        None => Arc::new(Jar::default()),
+    let host = target
+        .web_base
+        .host_str()
+        .context("--web-url/derived URL has no host")?
+        .to_string();
+
+    let (jar, login_creds) = if let Some(path) = &args.cookie_file {
+        (session::jar_from_cookie_file(path)?, None)
+    } else {
+        match (&args.username, &args.password) {
+            (Some(username), Some(password)) => {
+                (Arc::new(Jar::default()), Some((username.clone(), password.clone())))
+            }
+            (None, None) => {
+                let (jar, profile) = firefox_cookies::jar_from_firefox_profile(&host)?;
+                println!("using cookies from Firefox profile {}", profile.display());
+                (jar, None)
+            }
+            _ => bail!("--username and --password must be given together"),
+        }
     };
 
     let client = reqwest::blocking::Client::builder()
@@ -40,18 +58,9 @@ fn main() -> anyhow::Result<()> {
     let version = forgejo::detect_forgejo(&client, &target.web_base)?;
     println!("confirmed Forgejo, version {version}");
 
-    if args.cookie_file.is_none() {
-        match (&args.username, &args.password) {
-            (Some(username), Some(password)) => {
-                session::login(&client, &target.web_base, username, password)?;
-                println!("logged in as {username}");
-            }
-            _ => bail!(
-                "no authentication provided — pass --cookie-file, or both --username/FORGEJO_USER \
-                 and --password/FORGEJO_PASS. A bare API token is not sufficient for the LFS \
-                 admin routes this tool depends on (see ai-docs/research-forgejo-lfs-api.md §5)."
-            ),
-        }
+    if let Some((username, password)) = login_creds {
+        session::login(&client, &target.web_base, &username, &password)?;
+        println!("logged in as {username}");
     }
 
     println!("cloning bare mirror...");

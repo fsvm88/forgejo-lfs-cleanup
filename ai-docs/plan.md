@@ -212,6 +212,42 @@ initial ask: given an SSH URL, detect Forgejo, clone, compute referenced
 objects, enumerate existing objects, diff, report, and (opt-in) delete —
 all verified live against a real repo, including a full real cleanup run.
 
+## Phase 7 — Automatic Firefox cookie detection — DONE 2026-07-05
+
+Follow-up requested after Phase 6: rather than requiring the user to
+manually export a `--cookie-file`, auto-detect an already-logged-in
+Firefox session and use it, failing loudly if none is found.
+
+- `src/firefox_cookies.rs`: enumerates Firefox profile directories across
+  standard Linux (including Snap/Flatpak), macOS, and Windows locations;
+  for each `cookies.sqlite` found, copies it (plus `-wal`/`-shm` sidecars)
+  to a temp dir, checkpoints the WAL (handles Firefox holding the file
+  open, as validated by hand in Phase 0), and queries for cookies matching
+  the target host or its subdomains. Picks whichever profile's matching
+  cookies have the most recent `lastAccessed` as the best guess for "the
+  profile actually in use."
+- This is now the **default auth source** in `main.rs` when neither
+  `--cookie-file` nor `--username`/`--password` is given. Precedence:
+  `--cookie-file` > `--username`+`--password` > Firefox auto-detect.
+- **Fails loudly, not silently**, if no profile has cookies for the
+  target domain — names every location checked and suggests the manual
+  alternatives, per explicit request.
+- **Superseded an earlier finding**: Phase 0 concluded that reading the
+  cookie DB directly was unreliable (missed `x-robot-challenge`/
+  `cb_sessionid`). Revisited now — those cookies show up fine in a direct
+  query once a real browser session has actually cleared the anti-bot
+  layer and Firefox has flushed them to disk. The original miss was
+  session-timing, not a DB-reading limitation. See `architecture.md`
+  "Auth strategy" for the full account.
+- **Verified live, both paths**, against `example-org/example-repo`:
+  running with zero auth flags correctly found the real profile
+  (`~/.config/mozilla/firefox/7pyjgg36.default-release`) and authenticated
+  (reported the correct 317 referenced / 0 stale state, post-cleanup);
+  pointing `--web-url` at a domain with no matching cookies
+  (`example.com`) correctly failed with a clear message and exit code 1.
+- 3 new unit tests (exact/subdomain host matching, empty-result handling,
+  clear failure when no profiles exist) — 13 total, all passing.
+
 ## Explicitly out of scope
 
 - Any support for plain Gitea (see architecture.md "Known limitations").

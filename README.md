@@ -27,43 +27,62 @@ for why.
   only accept an authenticated session — a personal access token is not
   sufficient no matter how it's presented. See
   [`ai-docs/research-forgejo-lfs-api.md`](ai-docs/research-forgejo-lfs-api.md) §5
-  for how this was confirmed. You need one of:
-  - `--username`/`--password` (or the `FORGEJO_USER`/`FORGEJO_PASS` env
-    vars) for a scripted login, **or**
-  - `--cookie-file`, a Netscape/curl-format cookie jar exported from a
-    logged-in browser session, for instances where a scripted login can't
-    get past an anti-bot layer or 2FA (this is the case on Codeberg — see
-    below).
+  for how this was confirmed. You need one of, tried in this order:
+  1. `--cookie-file`, a Netscape/curl-format cookie jar, if given.
+  2. `--username`/`--password` (or `FORGEJO_USER`/`FORGEJO_PASS`) for a
+     scripted login, if given.
+  3. **Otherwise, automatically**: an already-logged-in Firefox session
+     for the target site, auto-detected from your local Firefox profile.
+     If none is found, the tool stops and tells you so — it never
+     proceeds unauthenticated.
 
 ## Usage
 
+The simplest form relies on auto-detecting your logged-in Firefox
+session — if you're logged into the instance in Firefox on this machine,
+this just works:
+
 ```sh
 # Report what would be deleted, without deleting anything (the default):
-forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git --username you --password '...'
-
-# Same, using a cookie file instead of scripted login:
-forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git --cookie-file cookies.txt
+forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git
 
 # Actually delete the stale objects, with an interactive confirmation prompt:
-forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git --cookie-file cookies.txt --execute
+forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git --execute
 
 # Same, but skip the prompt (for scripts/CI):
-forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git --cookie-file cookies.txt --execute --yes
+forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git --execute --yes
 ```
 
-Credentials are best supplied via environment variables rather than flags,
-to keep them out of shell history and process listings:
+Or supply credentials explicitly, e.g. for scripted/CI use or a different
+browser/machine than the one you're logged in on:
 
 ```sh
+# Scripted login (best supplied via env vars, to keep them out of shell
+# history and process listings):
 export FORGEJO_USER=you
 export FORGEJO_PASS='...'
 forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git
+
+# Or a cookie file exported from any browser:
+forgejo-lfs-cleanup ssh://git@codeberg.org/owner/repo.git --cookie-file cookies.txt
 ```
+
+### Automatic Firefox cookie detection
+
+If neither `--cookie-file` nor `--username`/`--password` is given, the
+tool looks for a Firefox profile on this machine with cookies for the
+target site (checking standard Linux, Snap, Flatpak, macOS, and Windows
+profile locations) and uses whichever one looks most recently active.
+Firefox can be running at the time — its cookie database is copied and
+checkpointed rather than read in place. If no profile has cookies for the
+site, the tool stops with an error naming every location it checked
+rather than proceeding unauthenticated.
 
 ### Getting a cookie file
 
-On instances with an anti-bot layer in front of the login page (Codeberg
-confirmed to have one — see
+For browsers other than Firefox, or when auto-detection can't find what
+it needs: on instances with an anti-bot layer in front of the login page
+(Codeberg confirmed to have one — see
 [`ai-docs/research-forgejo-lfs-api.md`](ai-docs/research-forgejo-lfs-api.md) §5b),
 a scripted login cannot complete, because the anti-bot cookie is only
 issued after a JS challenge a plain HTTP client can't run. Export your
@@ -104,8 +123,11 @@ limitations" for the full list, notably:
   these routes; the tool fails loudly rather than silently misbehaving if
   that happens.
 - Scripted login (`--username`/`--password`) is implemented but has not
-  been verified against a real account — `--cookie-file` is the
-  live-verified path.
+  been verified against a real account — Firefox auto-detection and
+  `--cookie-file` are the live-verified paths.
+- Automatic cookie detection currently only supports Firefox, not
+  Chrome/Chromium (Chrome encrypts cookies at rest via the OS keyring,
+  which is more work to support) — use `--cookie-file` there instead.
 
 ## Development
 
